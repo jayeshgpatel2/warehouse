@@ -1,17 +1,78 @@
 import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
 
-/*== STEP 1 ===============================================================
-The section below creates a Todo database table with a "content" field. Try
-adding a new "isDone" field as a boolean. The authorization rule below
-specifies that any unauthenticated user can "create", "read", "update", 
-and "delete" any "Todo" records.
-=========================================================================*/
+// Define type-safe enums
+type TransactionType = 'IN' | 'OUT';
+type ProductStatus = 'ACTIVE' | 'DISCONTINUED' | 'OUT_OF_STOCK';
+type ChannelType = 'KEVIN' | 'JAYESH' | 'RETAIL';
+
 const schema = a.schema({
-  Todo: a
-    .model({
-      content: a.string(),
-    })
-    .authorization((allow) => [allow.guest()]),
+  Product: a.model({
+    // Primary identifiers
+    id: a.id().required(),
+    code: a.string().required(), // Unique, non-editable
+    sku: a.string().required(), // Searchable, editable
+    image: a.string(),
+    
+    categoryName: a.string().required(),
+    status: a.enum(['ACTIVE', 'DISCONTINUED', 'OUT_OF_STOCK']),
+    
+    // Inventory and Cost tracking
+    lastPurchaseCost: a.float(),
+    stock_in_hand: a.integer().default(0),
+    restock_level: a.integer().required(),
+    
+    // Channel-wise tracking
+    kevin_quantity: a.integer().default(0),
+    jayesh_quantity: a.integer().default(0),
+    retail_quantity: a.integer().default(0),
+    
+    // Supplier info
+    vendor: a.string().required(),
+    
+    // Metadata
+    createdAt: a.datetime().required(),
+    updatedAt: a.datetime(),
+    createdBy: a.email().required(),
+    updatedBy: a.email(),
+    isActive: a.boolean().default(true),
+
+    // Relationships
+    transactions: a.hasMany('Transaction', 'productId'),
+  })
+  .authorization((allow) => [
+    allow.guest().to(['read']),
+    allow.authenticated().to(['create', 'read', 'update', 'delete'])
+  ]),
+  
+  Transaction: a.model({
+    // Primary identifier
+    id: a.id().required(),
+    
+    // Transaction details
+    quantity: a.integer().required(),
+    type: a.enum(['IN', 'OUT']),
+    channel: a.enum(['KEVIN', 'JAYESH', 'RETAIL']), // Required for OUT transactions
+    unitCost: a.float(), // Optional, only for IN transactions
+    
+    // Transaction metadata
+    transactionDate: a.datetime().required(),
+    notes: a.string(),
+    reference: a.string(),
+    
+    // Audit fields
+    createdAt: a.datetime().required(),
+    updatedAt: a.datetime(),
+    createdBy: a.email().required(),
+    updatedBy: a.email(),
+
+    // Relationships
+    productId: a.id().required(),
+    product: a.belongsTo('Product', 'productId'),
+  })
+  .authorization((allow) => [
+    allow.guest().to(['read']),
+    allow.authenticated().to(['create', 'read', 'update', 'delete'])
+  ]),
 });
 
 export type Schema = ClientSchema<typeof schema>;
@@ -19,35 +80,6 @@ export type Schema = ClientSchema<typeof schema>;
 export const data = defineData({
   schema,
   authorizationModes: {
-    defaultAuthorizationMode: 'iam',
-  },
+    defaultAuthorizationMode: 'userPool'
+  }
 });
-
-/*== STEP 2 ===============================================================
-Go to your frontend source code. From your client-side code, generate a
-Data client to make CRUDL requests to your table. (THIS SNIPPET WILL ONLY
-WORK IN THE FRONTEND CODE FILE.)
-
-Using JavaScript or Next.js React Server Components, Middleware, Server 
-Actions or Pages Router? Review how to generate Data clients for those use
-cases: https://docs.amplify.aws/gen2/build-a-backend/data/connect-to-API/
-=========================================================================*/
-
-/*
-"use client"
-import { generateClient } from "aws-amplify/data";
-import type { Schema } from "@/amplify/data/resource";
-
-const client = generateClient<Schema>() // use this Data client for CRUDL requests
-*/
-
-/*== STEP 3 ===============================================================
-Fetch records from the database and use them in your frontend component.
-(THIS SNIPPET WILL ONLY WORK IN THE FRONTEND CODE FILE.)
-=========================================================================*/
-
-/* For example, in a React component, you can use this snippet in your
-  function's RETURN statement */
-// const { data: todos } = await client.models.Todo.list()
-
-// return <ul>{todos.map(todo => <li key={todo.id}>{todo.content}</li>)}</ul>
